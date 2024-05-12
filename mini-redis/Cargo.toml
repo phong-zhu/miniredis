@@ -1,11 +1,11 @@
 [package]
-name = "miniredis"
+name = "mini-redis"
 version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-tokio = { version = "1", features = ["full"] }
+atoi = "2.0.0"
 bytes = "1"
-mini-redis = { path="mini-redis" }
+tokio = "1.36.0"

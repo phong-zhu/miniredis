@@ -25,10 +25,19 @@ async fn process(socket: TcpStream, db: Db) {
     use mini_redis::Command::{self, Get, Set};
 
     let mut connection = Connection::new(socket);
-    if let Some(frame) = connection.read_frame().await.unwrap() {
-        println!("got {:?}", frame);
-        let response = Frame::Error("unimplemented".to_string());
+    while let Some(frame) = connection.read_frame().await.unwrap() {
+        let response: Frame = match Command::from_frame(frame).unwrap() {
+            Set(cmd) => {
+                Frame::Error("unimplemented".to_string())
+            }
+            Get(cmd) => {
+                Frame::Error("unimplemented".to_string())
+            }
+            cmd => {
+                Frame::Error("unimplemented".to_string())
+            }
+        };
         connection.write_frame(&response).await.unwrap();
     }
-    println!("{}", mini_redis::add(1,1));
+    // println!("{}", mini_redis::add(1,1));
 }

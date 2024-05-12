@@ -9,7 +9,6 @@ pub use cmd::Command;
 pub use connection::Connection;
 pub use frame::Frame;
 
-
 pub fn add(left: usize, right: usize) -> usize {
     left + right
 }

@@ -1,5 +1,7 @@
 use std::time::Duration;
 use bytes::Bytes;
+use crate::Frame;
+use crate::Error;
 
 #[derive(Debug)]
 pub enum Command {
@@ -10,6 +12,13 @@ pub enum Command {
     Unsubscribe(Unsubscribe),
     Ping(Ping),
     Unknown(Unknown),
+}
+
+impl Command {
+    pub fn from_frame(frame: Frame) -> crate::Result<Command> {
+        let command = Command::Get(Get{key:"key".to_string()});
+        Ok(command)
+    }
 }
 
 #[derive(Debug)]

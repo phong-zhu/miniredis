@@ -28,10 +28,17 @@ async fn process(socket: TcpStream, db: Db) {
     while let Some(frame) = connection.read_frame().await.unwrap() {
         let response: Frame = match Command::from_frame(frame).unwrap() {
             Set(cmd) => {
-                Frame::Error("unimplemented".to_string())
+                let mut db = db.lock().unwrap();
+                db.insert(cmd.key().to_string(), cmd.value().clone());
+                Frame::Simple("OK".to_string())
             }
             Get(cmd) => {
-                Frame::Error("unimplemented".to_string())
+                let db = db.lock().unwrap();
+                if let Some(value) = db.get(cmd.key()) {
+                    Frame::Bulk(value.clone())
+                } else {
+                    Frame::Null
+                }
             }
             cmd => {
                 Frame::Error("unimplemented".to_string())

@@ -22,7 +22,7 @@ async fn main() {
 }
 
 async fn process(socket: TcpStream, db: Db) {
-    use mini_redis::Command::{self, Get, Set};
+    use mini_redis::Command::{self, Get, Set, Ping};
 
     let mut connection = Connection::new(socket);
     while let Some(frame) = connection.read_frame().await.unwrap() {
@@ -39,6 +39,9 @@ async fn process(socket: TcpStream, db: Db) {
                 } else {
                     Frame::Null
                 }
+            }
+            Ping(cmd) => {
+                cmd.into_frame()
             }
             cmd => {
                 Frame::Error("unimplemented".to_string())

@@ -116,7 +116,7 @@ impl Connection {
                 //
                 // If the encoded frame representation is invalid, an error is
                 // returned. This should terminate the **current** connection
-                // but should not impact any other connected client.
+                // but should not impact any other connected clients.
                 let frame = Frame::parse(&mut buf)?;
 
                 // Discard the parsed data from the read buffer.

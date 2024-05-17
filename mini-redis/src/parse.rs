@@ -4,18 +4,18 @@ use bytes::Bytes;
 use crate::Frame;
 
 #[derive(Debug)]
-pub(crate) struct Parse {
+pub struct Parse {
     parts: vec::IntoIter<Frame>,
 }
 
 #[derive(Debug)]
-pub(crate) enum ParseError {
+pub enum ParseError {
     EndOfStream,
     Other(crate::Error),
 }
 
 impl Parse {
-    pub(crate) fn new(frame: Frame) -> Result<Parse, ParseError> {
+    pub fn new(frame: Frame) -> Result<Parse, ParseError> {
         let array = match frame {
             Frame::Array(array) => array,
             frame => return Err(format!("parse error, expect array, got{:?}", frame).into()),
@@ -29,7 +29,7 @@ impl Parse {
         self.parts.next().ok_or(ParseError::EndOfStream)
     }
 
-    pub(crate) fn next_string(&mut self) -> Result<String, ParseError> {
+    pub fn next_string(&mut self) -> Result<String, ParseError> {
         match self.next()? {
             Frame::Simple(s) => Ok(s),
             Frame::Bulk(data) => {
@@ -41,7 +41,7 @@ impl Parse {
         }
     }
 
-    pub(crate) fn next_bytes(&mut self) -> Result<Bytes, ParseError> {
+    pub fn next_bytes(&mut self) -> Result<Bytes, ParseError> {
         match self.next()? {
             Frame::Simple(s) => Ok(Bytes::from(s.into_bytes())),
             Frame::Bulk(data) => Ok(data),
@@ -49,7 +49,7 @@ impl Parse {
         }
     }
 
-    pub(crate) fn next_int(&mut self) -> Result<u64, ParseError> {
+    pub fn next_int(&mut self) -> Result<u64, ParseError> {
         use atoi::atoi;
         const MSG: &str = "invalid number";
         match self.next()? {
@@ -60,7 +60,7 @@ impl Parse {
         }
     }
 
-    pub(crate) fn finish(&mut self) -> Result<(), ParseError> {
+    pub fn finish(&mut self) -> Result<(), ParseError> {
         if self.parts.next().is_none() {
             Ok(())
         } else {

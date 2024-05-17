@@ -2,6 +2,7 @@ mod cmd;
 mod connection;
 mod frame;
 mod parse;
+mod clients;
 
 pub type Error = Box<dyn std::error::Error + Send + Sync>;
 pub type Result<T> = std::result::Result<T, Error>;
@@ -9,6 +10,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub use cmd::Command;
 pub use connection::Connection;
 pub use frame::Frame;
+pub use clients::Client;
 
 use parse::{Parse, ParseError};
 

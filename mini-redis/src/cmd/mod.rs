@@ -1,5 +1,6 @@
 use std::time::Duration;
 use bytes::Bytes;
+use clap::{Parser, Subcommand};
 use crate::{Connection, Frame};
 use crate::Parse;
 use crate::parse::ParseError;
@@ -51,9 +52,16 @@ impl Get {
         &self.key
     }
 
-    pub(crate) fn parse_frames(parse: &mut Parse) -> crate::Result<Get> {
+    pub fn parse_frames(parse: &mut Parse) -> crate::Result<Get> {
         let key = parse.next_string()?;
         Ok(Get{key})
+    }
+
+    pub fn into_frame(self) -> Frame {
+        let mut frame = Frame::array();
+        frame.push_bulk(Bytes::from("get".as_bytes()));
+        frame.push_bulk(Bytes::from(self.key.into_bytes()));
+        frame
     }
 }
 
@@ -64,17 +72,17 @@ pub struct Publish {
 }
 
 impl Publish {
-    pub(crate) fn new(channel: impl ToString, message: Bytes) -> Publish {
+    pub fn new(channel: impl ToString, message: Bytes) -> Publish {
         Publish{channel: channel.to_string(), message}
     }
 
-    pub(crate) fn parse_frames(parse: &mut Parse) -> crate::Result<Publish> {
+    pub fn parse_frames(parse: &mut Parse) -> crate::Result<Publish> {
         let channel = parse.next_string()?;
         let message = parse.next_bytes()?;
         Ok(Publish{channel, message})
     }
 
-    // pub(crate) async fn apply(self, db: &Db, dst: &mut Connection) -> crate::Result<()> {
+    // pub async fn apply(self, db: &Db, dst: &mut Connection) -> crate::Result<()> {
     //
     // }
 }
@@ -103,7 +111,7 @@ impl Set {
         self.expire
     }
 
-    pub(crate) fn parse_frames(parse: &mut Parse) -> crate::Result<Set> {
+    pub fn parse_frames(parse: &mut Parse) -> crate::Result<Set> {
         use ParseError::EndOfStream;
         let key = parse.next_string()?;
         let value = parse.next_bytes()?;
@@ -131,11 +139,11 @@ pub struct Subscribe {
 }
 
 impl Subscribe {
-    pub(crate) fn new(channels: Vec<String>) -> Subscribe {
+    pub fn new(channels: Vec<String>) -> Subscribe {
         Subscribe{channels}
     }
 
-    pub(crate) fn parse_frames(parse: &mut Parse) -> crate::Result<Subscribe> {
+    pub fn parse_frames(parse: &mut Parse) -> crate::Result<Subscribe> {
         use ParseError::EndOfStream;
         let mut channels = vec![parse.next_string()?];
         loop {
@@ -155,11 +163,11 @@ pub struct Unsubscribe {
 }
 
 impl Unsubscribe {
-    pub(crate) fn new(channels: &[String]) -> Unsubscribe {
+    pub fn new(channels: &[String]) -> Unsubscribe {
         Unsubscribe{channels: channels.to_vec()}
     }
 
-    pub(crate) fn parse_frames(parse: &mut Parse) -> crate::Result<Unsubscribe> {
+    pub fn parse_frames(parse: &mut Parse) -> crate::Result<Unsubscribe> {
         use ParseError::EndOfStream;
         let mut channels = vec![];
         loop {
@@ -179,16 +187,25 @@ pub struct Ping {
 }
 
 impl Ping {
-    pub(crate) fn new(msg: Option<Bytes>) -> Ping {
+    pub fn new(msg: Option<Bytes>) -> Ping {
         Ping{msg}
     }
 
-    pub(crate) fn parse_frames(parse: &mut Parse) -> crate::Result<Ping> {
+    pub fn parse_frames(parse: &mut Parse) -> crate::Result<Ping> {
         match parse.next_bytes() {
             Ok(msg) => Ok(Ping::new(Some(msg))),
             Err(ParseError::EndOfStream) => Ok(Ping::default()),
             Err(e) => Err(e.into()),
         }
+    }
+
+    pub fn into_frame(self) -> Frame {
+        let mut frame = Frame::array();
+        frame.push_bulk(Bytes::from("ping".as_bytes()));
+        if let Some(msg) = self.msg {
+            frame.push_bulk(msg);
+        }
+        frame
     }
 }
 
@@ -198,11 +215,11 @@ pub struct Unknown {
 }
 
 impl Unknown {
-    pub(crate) fn new(key: impl ToString) -> Unknown {
+    pub fn new(key: impl ToString) -> Unknown {
         Unknown{command_name: key.to_string()}
     }
 
-    pub(crate) fn get_name(&self) -> &str {
+    pub fn get_name(&self) -> &str {
         &self.command_name
     }
 }

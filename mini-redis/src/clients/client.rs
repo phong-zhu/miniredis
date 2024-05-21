@@ -2,7 +2,7 @@ use std::io::{Error, ErrorKind};
 use bytes::Bytes;
 use tokio::net::{TcpStream, ToSocketAddrs};
 use tracing::{debug, instrument};
-use crate::cmd::Get;
+use crate::cmd::{Get, Ping};
 use crate::{Connection, Frame};
 
 pub struct Client {
@@ -16,7 +16,7 @@ impl Client {
         Ok(Client{connection})
     }
 
-    // #[instrument(skip(self))]
+    #[instrument(skip(self))]
     pub async fn get(&mut self, key: &str) -> crate::Result<Option<Bytes>> {
         let frame = Get::new(key).into_frame();
         self.connection.write_frame(&frame).await?;
@@ -24,6 +24,18 @@ impl Client {
             Frame::Simple(value) => Ok(Some(value.into())),
             Frame::Bulk(value) => Ok(Some(value)),
             Frame::Null => Ok(None),
+            frame => Err(frame.to_error()),
+        }
+    }
+
+    pub async fn ping(&mut self, msg: Option<Bytes>) -> crate::Result<Bytes> {
+        let frame = Ping::new(msg).into_frame();
+        debug!(request = ?frame);
+        self.connection.write_frame(&frame).await?;
+
+        match self.read_response().await? {
+            Frame::Simple(value) => Ok(value.into()),
+            Frame::Bulk(value) => Ok(value),
             frame => Err(frame.to_error()),
         }
     }

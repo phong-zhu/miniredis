@@ -207,6 +207,14 @@ impl Ping {
         }
         frame
     }
+
+    pub fn get_msg(self) -> Option<Bytes> {
+        if let Some(msg) = self.msg {
+            Some(msg)
+        } else {
+            Some("PONG".as_bytes().into())
+        }
+    }
 }
 
 #[derive(Debug)]

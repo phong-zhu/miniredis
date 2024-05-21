@@ -26,7 +26,7 @@ async fn process(socket: TcpStream, db: Db) {
 
     let mut connection = Connection::new(socket);
     while let Some(frame) = connection.read_frame().await.unwrap() {
-        let response: Frame = match Command::from_frame(frame).unwrap() {
+        let response = match Command::from_frame(frame).unwrap() {
             Set(cmd) => {
                 let mut db = db.lock().unwrap();
                 db.insert(cmd.key().to_string(), cmd.value().clone());
@@ -41,7 +41,7 @@ async fn process(socket: TcpStream, db: Db) {
                 }
             }
             Ping(cmd) => {
-                cmd.into_frame()
+                Frame::Bulk(cmd.get_msg().unwrap())
             }
             cmd => {
                 Frame::Error("unimplemented".to_string())

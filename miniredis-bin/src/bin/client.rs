@@ -1,10 +1,11 @@
 use bytes::Bytes;
 use mini_redis::Client;
 use mini_redis::Result;
+use miniredis_bin::SERVER_ADDR;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let mut client = Client::connect("127.0.0.1:6379").await.unwrap();
+    let mut client = Client::connect(SERVER_ADDR).await.unwrap();
     let get_res = client.get("hello").await?;
     println!("get {:?}", get_res);
     let ping_res = client.ping(Some(Bytes::from("ping"))).await?;

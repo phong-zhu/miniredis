@@ -1,10 +1,9 @@
-use mini_redis::Result;
+
+use mini_redis::{Client, Result};
+use miniredis_bin::SERVER_ADDR;
 
 #[tokio::main]
-async fn main() -> Result<()> {
-    !todo!()
-}
-
-async fn publish() -> Result<()> {
-    !todo!()
+async fn main() {
+    let mut client = Client::connect(SERVER_ADDR);
+    println!("hello");
 }

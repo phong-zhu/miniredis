@@ -2,14 +2,14 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use bytes::Bytes;
-use mini_redis::{Connection, Frame};
+use mini_redis::{Connection, Frame, Result};
 use tokio::net::{TcpListener, TcpStream};
 use miniredis_bin::SERVER_ADDR;
 
 type Db = Arc<Mutex<HashMap<String, Bytes>>>;
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<()>{
     let listener = TcpListener::bind(SERVER_ADDR).await.unwrap();
     println!("listening");
     let db = Arc::new(Mutex::new(HashMap::new()));
@@ -17,13 +17,13 @@ async fn main() {
         let (socket, _) = listener.accept().await.unwrap();
         let db = db.clone();
         tokio::spawn(async move {
-            process(socket, db).await;
+            process(socket, &db).await;
         });
     }
 }
 
-async fn process(socket: TcpStream, db: Db) {
-    use mini_redis::Command::{self, Get, Set, Ping};
+async fn process(socket: TcpStream, db: &Db) {
+    use mini_redis::Command::{self, Get, Set, Ping, Subscribe};
 
     let mut connection = Connection::new(socket);
     while let Some(frame) = connection.read_frame().await.unwrap() {
@@ -44,6 +44,7 @@ async fn process(socket: TcpStream, db: Db) {
             Ping(cmd) => {
                 Frame::Bulk(cmd.get_msg().unwrap())
             }
+            // Subscribe(cmd) => cmd.apply(db, dst, shutdown).await,
             cmd => {
                 Frame::Error("unimplemented".to_string())
             }

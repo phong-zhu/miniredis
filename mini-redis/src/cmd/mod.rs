@@ -85,6 +85,14 @@ impl Publish {
     // pub async fn apply(self, db: &Db, dst: &mut Connection) -> crate::Result<()> {
     //
     // }
+
+    pub fn into_frame(self) -> Frame {
+        let mut frame = Frame::array();
+        frame.push_bulk(Bytes::from("publish".as_bytes()));
+        frame.push_bulk(Bytes::from(self.channel.into_bytes()));
+        frame.push_bulk(Bytes::from(self.message));
+        frame
+    }
 }
 
 #[derive(Debug)]
@@ -154,6 +162,15 @@ impl Subscribe {
             }
         }
         Ok(Subscribe{channels})
+    }
+
+    pub fn into_frame(self) -> Frame {
+        let mut frame = Frame::array();
+        frame.push_bulk(Bytes::from("subscribe".as_bytes()));
+        for channel in self.channels {
+            frame.push_bulk(Bytes::from(channel.into_bytes()));
+        }
+        frame
     }
 }
 

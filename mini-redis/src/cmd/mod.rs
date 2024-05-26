@@ -1,9 +1,14 @@
+use std::pin::Pin;
 use std::time::Duration;
 use bytes::Bytes;
 use clap::{Parser, Subcommand};
+use tokio::select;
+use tokio_stream::{Stream, StreamExt, StreamMap};
+use tokio::sync::broadcast;
 use crate::{Connection, Frame};
 use crate::Parse;
 use crate::parse::ParseError;
+use crate::Db;
 
 #[derive(Debug)]
 pub enum Command {
@@ -172,6 +177,71 @@ impl Subscribe {
         }
         frame
     }
+
+    pub async fn apply(mut self, db: &Db, connection: &mut Connection) -> crate::Result<Frame> {
+        return Ok(Frame::Simple("test".to_string()));
+        // let mut subscription = StreamMap::new();
+        // loop {
+        //     for channel_name in self.channels.drain(..) {
+        //         subscribe_to_channel(channel_name, &mut subscription, db, connection).await?;
+        //     }
+        //     select! {
+        //         Some((channel_name, msg)) = subscription.next() {
+        //             return make_message_frame(channel_name, msg);
+        //         }
+        //         res = connection.read_frame() => {
+        //             let frame = match res? {
+        //                 Some(frame) => frame,
+        //                 // This happens if the remote client has disconnected.
+        //                 None => return Ok(())
+        //             };
+        //
+        //             handle_command(
+        //                 frame,
+        //                 &mut self.channels,
+        //                 &mut subscriptions,
+        //                 dst,
+        //             ).await?;
+        //         }
+        //     }
+        // }
+    }
+}
+
+type Messages = Pin<Box<dyn Stream<Item = Bytes> + Send>>;
+
+async fn subscribe_to_channel(channel_name: String, subscriptions: &mut StreamMap<String, Messages>, db: &Db, connection: &mut Connection) -> crate::Result<()> {
+    let mut rx = db.subscribe(channel_name.clone());
+    let rx = Box::pin(async_stream::stream! {
+        loop {
+            match rx.recv().await {
+                Ok(msg) => yield msg,
+                // If we lagged in consuming messages, just resume.
+                Err(broadcast::error::RecvError::Lagged(_)) => {}
+                Err(_) => break,
+            }
+        }
+    });
+    subscriptions.insert(channel_name.clone(), rx);
+    let response = make_subscribe_frame(channel_name, subscriptions.len());
+    connection.write_frame(&response).await?;
+    Ok(())
+}
+
+fn make_subscribe_frame(channel_name: String, num_subs: usize) -> Frame {
+    let mut response = Frame::array();
+    response.push_bulk(Bytes::from_static(b"subscribe"));
+    response.push_bulk(Bytes::from(channel_name));
+    response.push_int(num_subs as u64);
+    response
+}
+
+fn make_message_frame(channel_name: String, msg: Bytes) -> Frame {
+    let mut response = Frame::array();
+    response.push_bulk(Bytes::from_static(b"message"));
+    response.push_bulk(Bytes::from(channel_name));
+    response.push_bulk(msg);
+    response
 }
 
 #[derive(Clone, Debug)]

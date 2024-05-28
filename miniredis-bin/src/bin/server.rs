@@ -18,41 +18,33 @@ async fn main() -> Result<()>{
         let mut connection = Connection::new(socket);
         let db = db.clone();
         tokio::spawn(async move {
-            process(connection, &db).await;
+            process(&mut connection, &db).await;
         });
     }
 }
 
-async fn process(mut connection: Connection, db: &Db) {
+async fn process(connection: &mut Connection, db: &Db) -> crate::Result<()> {
     use mini_redis::Command::{self, Get, Set, Ping, Subscribe};
     while let Some(frame) = connection.read_frame().await.unwrap() {
-        let response = match Command::from_frame(frame).unwrap() {
-            Set(cmd) => {
-                db.set(cmd.key().to_string(), cmd.value().clone(), cmd.expire());
-                Frame::Simple("OK".to_string())
-            }
+        match Command::from_frame(frame).unwrap() {
             Get(cmd) => {
-                if let Some(value) = db.get(cmd.key()) {
-                    Frame::Bulk(value.clone())
-                } else {
-                    Frame::Null
-                }
+                cmd.apply(db, connection).await?;
+            }
+            Set(cmd) => {
+                cmd.apply(db, connection).await?;
             }
             Ping(cmd) => {
-                Frame::Bulk(cmd.get_msg().unwrap())
+                cmd.apply(db, connection).await?;
             }
             Subscribe(cmd) => {
-                let frame = cmd.apply(db, &mut connection).await;
-                match frame {
-                    Ok(frame) => frame,
-                    _ => Frame::Error("subscribe err".to_string()),
-                }
+                cmd.apply(db, connection).await?;
             }
             cmd => {
-                Frame::Error("unimplemented".to_string())
+                let error = Frame::Error("unimplemented".to_string());
+                connection.write_frame(&error).await?;
             }
         };
-        connection.write_frame(&response).await.unwrap();
     }
+    Ok(())
     // println!("{}", mini_redis::add(1,1));
 }

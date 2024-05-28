@@ -5,6 +5,7 @@ use clap::{Parser, Subcommand};
 use tokio::select;
 use tokio_stream::{Stream, StreamExt, StreamMap};
 use tokio::sync::broadcast;
+use tracing::debug;
 use crate::{Connection, Frame};
 use crate::Parse;
 use crate::parse::ParseError;
@@ -13,8 +14,8 @@ use crate::Db;
 #[derive(Debug)]
 pub enum Command {
     Get(Get),
-    Publish(Publish),
     Set(Set),
+    Publish(Publish),
     Subscribe(Subscribe),
     Unsubscribe(Unsubscribe),
     Ping(Ping),
@@ -67,6 +68,17 @@ impl Get {
         frame.push_bulk(Bytes::from("get".as_bytes()));
         frame.push_bulk(Bytes::from(self.key.into_bytes()));
         frame
+    }
+
+    pub async fn apply(self, db: &Db, connection: &mut Connection) -> crate::Result<()> {
+        let frame = if let Some(value) = db.get(&self.key) {
+            Frame::Bulk(value)
+        } else {
+            Frame::Null
+        };
+        debug!(?frame);
+        connection.write_frame(&frame).await?;
+        Ok(())
     }
 }
 
@@ -144,6 +156,14 @@ impl Set {
         }
         Ok(Set{key: key.to_string(), value, expire})
     }
+
+    pub async fn apply(self, db: &Db, connection: &mut Connection) -> crate::Result<()> {
+        db.set(self.key, self.value, self.expire);
+        let frame = Frame::Simple("OK".to_string());
+        debug!(?frame);
+        connection.write_frame(&frame).await?;
+        Ok(())
+    }
 }
 
 #[derive(Debug)]
@@ -178,8 +198,10 @@ impl Subscribe {
         frame
     }
 
-    pub async fn apply(mut self, db: &Db, connection: &mut Connection) -> crate::Result<Frame> {
-        return Ok(Frame::Simple("test".to_string()));
+    pub async fn apply(mut self, db: &Db, connection: &mut Connection) -> crate::Result<()> {
+        let f = Frame::Simple("test".to_string());
+        connection.write_frame(&f).await?;
+        Ok(())
         // let mut subscription = StreamMap::new();
         // loop {
         //     for channel_name in self.channels.drain(..) {
@@ -295,11 +317,24 @@ impl Ping {
         frame
     }
 
-    pub fn get_msg(self) -> Option<Bytes> {
+    pub async fn apply(self, db: &Db, connection: &mut Connection) -> crate::Result<()> {
+        let frame = Frame::Bulk(self.get_msg());
+        connection.write_frame(&frame).await?;
+        Ok(())
+    }
+
+    // pub fn get_msg(self) -> Option<Bytes> {
+    //     if let Some(msg) = self.msg {
+    //         Some(msg)
+    //     } else {
+    //         Some("PONG".as_bytes().into())
+    //     }
+    // }
+    pub fn get_msg(self) -> Bytes {
         if let Some(msg) = self.msg {
-            Some(msg)
+            msg
         } else {
-            Some("PONG".as_bytes().into())
+            "PONG".as_bytes().into()
         }
     }
 }

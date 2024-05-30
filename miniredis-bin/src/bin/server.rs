@@ -24,7 +24,7 @@ async fn main() -> Result<()>{
 }
 
 async fn process(connection: &mut Connection, db: &Db) -> crate::Result<()> {
-    use mini_redis::Command::{self, Get, Set, Ping, Subscribe};
+    use mini_redis::Command::{self, Get, Set, Ping, Subscribe, Publish};
     while let Some(frame) = connection.read_frame().await.unwrap() {
         match Command::from_frame(frame).unwrap() {
             Get(cmd) => {
@@ -37,6 +37,9 @@ async fn process(connection: &mut Connection, db: &Db) -> crate::Result<()> {
                 cmd.apply(db, connection).await?;
             }
             Subscribe(cmd) => {
+                cmd.apply(db, connection).await?;
+            }
+            Publish(cmd) => {
                 cmd.apply(db, connection).await?;
             }
             cmd => {

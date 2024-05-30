@@ -111,16 +111,19 @@ impl Publish {
         Ok(Publish{channel, message})
     }
 
-    // pub async fn apply(self, db: &Db, dst: &mut Connection) -> crate::Result<()> {
-    //
-    // }
-
     pub fn into_frame(self) -> Frame {
         let mut frame = Frame::array();
         frame.push_bulk(Bytes::from("publish".as_bytes()));
         frame.push_bulk(Bytes::from(self.channel.into_bytes()));
         frame.push_bulk(Bytes::from(self.message));
         frame
+    }
+
+    pub async fn apply(self, db: &Db, connection: &mut Connection) -> crate::Result<()> {
+        let num_subscribers = db.publish(&self.channel, self.message);
+        let response = Frame::Integer(num_subscribers as u64);
+        connection.write_frame(&response).await?;
+        Ok(())
     }
 }
 

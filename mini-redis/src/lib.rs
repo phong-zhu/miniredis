@@ -4,6 +4,7 @@ mod frame;
 mod parse;
 mod clients;
 mod db;
+mod shutdown;
 
 pub type Error = Box<dyn std::error::Error + Send + Sync>;
 pub type Result<T> = std::result::Result<T, Error>;
@@ -13,6 +14,7 @@ pub use connection::Connection;
 pub use frame::Frame;
 pub use clients::Client;
 pub use db::Db;
+pub use shutdown::Shutdown;
 
 use parse::{Parse, ParseError};
 

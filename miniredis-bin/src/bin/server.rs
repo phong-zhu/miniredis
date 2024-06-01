@@ -1,4 +1,5 @@
 use bytes::Bytes;
+use mini_redis::run;
 use mini_redis::Db;
 use mini_redis::Shutdown;
 use mini_redis::{Connection, Frame, Result};
@@ -16,28 +17,8 @@ use tracing::{debug, error, info, instrument};
 async fn main() -> Result<()> {
     let listener = TcpListener::bind(SERVER_ADDR).await.unwrap();
     println!("listening");
-    let db = Db::new();
-    let (notify_shutdown, _) = broadcast::channel(1);
-
-    loop {
-        let (socket, _) = listener.accept().await?;
-        let mut connection = Connection::new(socket);
-        let db = db.clone();
-        let notify_shutdown = notify_shutdown.clone();
-        let mut shutdown = Shutdown::new(notify_shutdown.subscribe());
-        tokio::spawn(async move {
-            select! {
-                res = process(&mut connection, &db, &mut shutdown) => {
-                    if let Err(err) = res {
-                        error!(cause=%err, "fail to process")
-                    }
-                }
-                // _ = signal::ctrl_c() => {
-                //     println!("shutting down by ctrl c");
-                // }
-            }
-        });
-    }
+    run(listener, signal::ctrl_c()).await;
+    Ok(())
 }
 
 async fn process(

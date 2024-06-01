@@ -1,15 +1,16 @@
-use std::pin::Pin;
-use std::time::Duration;
-use bytes::Bytes;
-use clap::{Parser, Subcommand};
-use tokio::select;
-use tokio_stream::{Stream, StreamExt, StreamMap};
-use tokio::sync::broadcast;
-use tracing::debug;
-use crate::{Connection, Frame};
-use crate::Parse;
 use crate::parse::ParseError;
 use crate::Db;
+use crate::Parse;
+use crate::Shutdown;
+use crate::{Connection, Frame};
+use bytes::Bytes;
+use clap::{Parser, Subcommand};
+use std::pin::Pin;
+use std::time::Duration;
+use tokio::select;
+use tokio::sync::broadcast;
+use tokio_stream::{Stream, StreamExt, StreamMap};
+use tracing::debug;
 
 #[derive(Debug)]
 pub enum Command {
@@ -33,9 +34,7 @@ impl Command {
             "subscribe" => Command::Subscribe(Subscribe::parse_frames(&mut parse)?),
             "unsubscribe" => Command::Unsubscribe(Unsubscribe::parse_frames(&mut parse)?),
             "ping" => Command::Ping(Ping::parse_frames(&mut parse)?),
-            _ => {
-                return Ok(Command::Unknown(Unknown::new(command_name)))
-            }
+            _ => return Ok(Command::Unknown(Unknown::new(command_name))),
         };
         parse.finish()?;
         Ok(command)
@@ -50,6 +49,26 @@ impl Command {
             Command::Unsubscribe(_) => "unsubscribe",
             Command::Ping(_) => "ping",
             Command::Unknown(cmd) => cmd.get_name(),
+        }
+    }
+
+    pub async fn apply(
+        self,
+        db: &Db,
+        connection: &mut Connection,
+        shutdown: &mut Shutdown,
+    ) -> crate::Result<()> {
+        use Command::*;
+        match self {
+            Get(cmd) => cmd.apply(db, connection).await,
+            Set(cmd) => cmd.apply(db, connection).await,
+            Publish(cmd) => cmd.apply(db, connection).await,
+            Subscribe(cmd) => cmd.apply(db, connection, shutdown).await,
+            Ping(cmd) => cmd.apply(db, connection).await,
+            Unknown(cmd) => cmd.apply(connection).await,
+            // `Unsubscribe` cannot be applied. It may only be received from the
+            // context of a `Subscribe` command.
+            Unsubscribe(_) => Err("`Unsubscribe` is unsupported in this context".into()),
         }
     }
 }
@@ -72,7 +91,7 @@ impl Get {
 
     pub fn parse_frames(parse: &mut Parse) -> crate::Result<Get> {
         let key = parse.next_string()?;
-        Ok(Get{key})
+        Ok(Get { key })
     }
 
     pub fn into_frame(self) -> Frame {
@@ -102,13 +121,16 @@ pub struct Publish {
 
 impl Publish {
     pub fn new(channel: impl ToString, message: Bytes) -> Publish {
-        Publish{channel: channel.to_string(), message}
+        Publish {
+            channel: channel.to_string(),
+            message,
+        }
     }
 
     pub fn parse_frames(parse: &mut Parse) -> crate::Result<Publish> {
         let channel = parse.next_string()?;
         let message = parse.next_bytes()?;
-        Ok(Publish{channel, message})
+        Ok(Publish { channel, message })
     }
 
     pub fn into_frame(self) -> Frame {
@@ -136,7 +158,11 @@ pub struct Set {
 
 impl Set {
     pub fn new(key: impl ToString, value: Bytes, expire: Option<Duration>) -> Set {
-        Set{key: key.to_string(), value, expire}
+        Set {
+            key: key.to_string(),
+            value,
+            expire,
+        }
     }
 
     pub fn key(&self) -> &str {
@@ -166,10 +192,14 @@ impl Set {
                 expire = Some(Duration::from_millis(ms));
             }
             Ok(_) => return Err("SET only supports expire option".into()),
-            Err(EndOfStream) => {},
+            Err(EndOfStream) => {}
             Err(err) => return Err(err.into()),
         }
-        Ok(Set{key: key.to_string(), value, expire})
+        Ok(Set {
+            key: key.to_string(),
+            value,
+            expire,
+        })
     }
 
     pub async fn apply(self, db: &Db, connection: &mut Connection) -> crate::Result<()> {
@@ -188,7 +218,7 @@ pub struct Subscribe {
 
 impl Subscribe {
     pub fn new(channels: Vec<String>) -> Subscribe {
-        Subscribe{channels}
+        Subscribe { channels }
     }
 
     pub fn parse_frames(parse: &mut Parse) -> crate::Result<Subscribe> {
@@ -201,7 +231,7 @@ impl Subscribe {
                 Err(err) => return Err(err.into()),
             }
         }
-        Ok(Subscribe{channels})
+        Ok(Subscribe { channels })
     }
 
     pub fn into_frame(self) -> Frame {
@@ -213,7 +243,12 @@ impl Subscribe {
         frame
     }
 
-    pub async fn apply(mut self, db: &Db, connection: &mut Connection) -> crate::Result<()> {
+    pub async fn apply(
+        mut self,
+        db: &Db,
+        connection: &mut Connection,
+        shutdown: &mut Shutdown,
+    ) -> crate::Result<()> {
         // let f = Frame::Simple("test".to_string());
         // connection.write_frame(&f).await?;
         // Ok(())
@@ -240,6 +275,9 @@ impl Subscribe {
                         connection,
                     ).await?;
                 }
+                _ = shutdown.recv() => {
+                    return Ok(());
+                }
             }
         }
     }
@@ -247,7 +285,12 @@ impl Subscribe {
 
 type Messages = Pin<Box<dyn Stream<Item = Bytes> + Send>>;
 
-async fn subscribe_to_channel(channel_name: String, subscriptions: &mut StreamMap<String, Messages>, db: &Db, connection: &mut Connection) -> crate::Result<()> {
+async fn subscribe_to_channel(
+    channel_name: String,
+    subscriptions: &mut StreamMap<String, Messages>,
+    db: &Db,
+    connection: &mut Connection,
+) -> crate::Result<()> {
     let mut rx = db.subscribe(channel_name.clone());
     let rx = Box::pin(async_stream::stream! {
         loop {
@@ -302,7 +345,10 @@ async fn handle_command(
         Command::Unsubscribe(mut unsubscribe) => {
             if unsubscribe.channels.is_empty() {
                 if unsubscribe.channels.is_empty() {
-                    unsubscribe.channels = subscriptions.keys().map(|channel_name| channel_name.to_string()).collect();
+                    unsubscribe.channels = subscriptions
+                        .keys()
+                        .map(|channel_name| channel_name.to_string())
+                        .collect();
                 }
                 for channel_name in unsubscribe.channels {
                     subscriptions.remove(&channel_name);
@@ -326,7 +372,9 @@ pub struct Unsubscribe {
 
 impl Unsubscribe {
     pub fn new(channels: &[String]) -> Unsubscribe {
-        Unsubscribe{channels: channels.to_vec()}
+        Unsubscribe {
+            channels: channels.to_vec(),
+        }
     }
 
     pub fn parse_frames(parse: &mut Parse) -> crate::Result<Unsubscribe> {
@@ -336,10 +384,10 @@ impl Unsubscribe {
             match parse.next_string() {
                 Ok(s) => channels.push(s),
                 Err(EndOfStream) => break,
-                Err(err)=> return Err(err.into()),
+                Err(err) => return Err(err.into()),
             }
         }
-        Ok(Unsubscribe{channels})
+        Ok(Unsubscribe { channels })
     }
 }
 
@@ -350,7 +398,7 @@ pub struct Ping {
 
 impl Ping {
     pub fn new(msg: Option<Bytes>) -> Ping {
-        Ping{msg}
+        Ping { msg }
     }
 
     pub fn parse_frames(parse: &mut Parse) -> crate::Result<Ping> {
@@ -399,7 +447,9 @@ pub struct Unknown {
 
 impl Unknown {
     pub fn new(key: impl ToString) -> Unknown {
-        Unknown{command_name: key.to_string()}
+        Unknown {
+            command_name: key.to_string(),
+        }
     }
 
     pub fn get_name(&self) -> &str {

@@ -177,6 +177,18 @@ impl Set {
         self.expire
     }
 
+    pub fn into_frame(self) -> Frame {
+        let mut frame = Frame::array();
+        frame.push_bulk(Bytes::from("set".as_bytes()));
+        frame.push_bulk(Bytes::from(self.key.into_bytes()));
+        frame.push_bulk(self.value);
+        if let Some(ms) = self.expire {
+            frame.push_bulk(Bytes::from("px".as_bytes()));
+            frame.push_int(ms.as_millis() as u64);
+        }
+        frame
+    }
+
     pub fn parse_frames(parse: &mut Parse) -> crate::Result<Set> {
         use ParseError::EndOfStream;
         let key = parse.next_string()?;

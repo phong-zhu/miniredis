@@ -1,11 +1,12 @@
-use std::io::{Error, ErrorKind};
-use bytes::Bytes;
-use tokio::net::{TcpStream, ToSocketAddrs};
-use tokio_stream::{Stream};
-use async_stream::try_stream;
-use tracing::{debug, instrument};
-use crate::cmd::{Get, Ping, Publish, Subscribe};
+use crate::cmd::{Get, Ping, Publish, Set, Subscribe};
 use crate::{Connection, Frame};
+use async_stream::try_stream;
+use bytes::Bytes;
+use std::io::{Error, ErrorKind};
+use std::time::Duration;
+use tokio::net::{TcpStream, ToSocketAddrs};
+use tokio_stream::Stream;
+use tracing::{debug, instrument};
 
 pub struct Client {
     connection: Connection,
@@ -15,7 +16,7 @@ impl Client {
     pub async fn connect<T: ToSocketAddrs>(addr: T) -> crate::Result<Client> {
         let socket = TcpStream::connect(addr).await?;
         let connection = Connection::new(socket);
-        Ok(Client{connection})
+        Ok(Client { connection })
     }
 
     #[instrument(skip(self))]
@@ -30,6 +31,33 @@ impl Client {
         }
     }
 
+    #[instrument(skip(self))]
+    pub async fn set(&mut self, key: &str, value: Bytes) -> crate::Result<()> {
+        self.set_cmd(Set::new(key, value, None)).await
+    }
+
+    #[instrument(skip(self))]
+    pub async fn set_expires(
+        &mut self,
+        key: &str,
+        value: Bytes,
+        expiration: Duration,
+    ) -> crate::Result<()> {
+        self.set_cmd(Set::new(key, value, Some(expiration))).await
+    }
+
+    // do_set
+    async fn set_cmd(&mut self, cmd: Set) -> crate::Result<()> {
+        let frame = cmd.into_frame();
+        debug!(?frame);
+        self.connection.write_frame(&frame).await?;
+        match self.read_response().await? {
+            Frame::Simple(response) if response == "OK" => Ok(()),
+            frame => Err(frame.to_error()),
+        }
+    }
+
+    #[instrument(skip(self))]
     pub async fn ping(&mut self, msg: Option<Bytes>) -> crate::Result<Bytes> {
         let frame = Ping::new(msg).into_frame();
         debug!(request = ?frame);
@@ -42,6 +70,7 @@ impl Client {
         }
     }
 
+    #[instrument(skip(self))]
     pub async fn publish(&mut self, channel: &str, message: Bytes) -> crate::Result<u64> {
         let frame = Publish::new(channel, message).into_frame();
         debug!(request = ?frame);
@@ -52,9 +81,10 @@ impl Client {
         }
     }
 
+    #[instrument(skip(self))]
     pub async fn subscribe(mut self, channels: Vec<String>) -> crate::Result<Subscriber> {
         self.subscribe_cmd(&channels).await?;
-        Ok(Subscriber{
+        Ok(Subscriber {
             client: self,
             subscribed_channels: channels,
         })
@@ -68,9 +98,10 @@ impl Client {
             let response = self.read_response().await?;
             match response {
                 Frame::Array(ref frame) => match frame.as_slice() {
-                    [subscribe, schannel, ..] if *subscribe == "subscribe" && *schannel == channel => {}
+                    [subscribe, schannel, ..]
+                        if *subscribe == "subscribe" && *schannel == channel => {}
                     _ => return Err(response.to_error()),
-                }
+                },
                 frame => return Err(frame.to_error()),
             }
         }
@@ -107,8 +138,7 @@ impl Subscriber {
                 debug!(?mframe);
                 match mframe {
                     Frame::Array(ref frame) => match frame.as_slice() {
-                        [message, channel, content] if *message == "message"
-                        => Ok(Some(Message{
+                        [message, channel, content] if *message == "message" => Ok(Some(Message {
                             channel: channel.to_string(),
                             content: Bytes::from(content.to_string()),
                         })),
@@ -135,5 +165,4 @@ pub struct Message {
     pub content: Bytes,
 }
 
-impl Message {
-}
+impl Message {}

@@ -1,4 +1,4 @@
-use crate::cmd::{Get, Ping, Publish, Set, Subscribe};
+use crate::cmd::{Get, Ping, Publish, Set, Subscribe, Unsubscribe};
 use crate::{Connection, Frame};
 use async_stream::try_stream;
 use bytes::Bytes;
@@ -158,8 +158,49 @@ impl Subscriber {
             }
         }
     }
+
+    #[instrument(skip(self))]
+    pub async fn subscribe(&mut self, channels: &[String]) -> crate::Result<()> {
+        self.client.subscribe_cmd(channels).await?;
+        self.subscribed_channels
+            .extend(channels.iter().map(Clone::clone));
+        Ok(())
+    }
+
+    #[instrument(skip(self))]
+    pub async fn unsubscribe(&mut self, channels: &[String]) -> crate::Result<()> {
+        let frame = Unsubscribe::new(channels).into_frame();
+        debug!(?frame);
+        self.client.connection.write_frame(&frame).await?;
+        let num = if channels.is_empty() {
+            self.subscribed_channels.len()
+        } else {
+            channels.len()
+        };
+        for _ in 0..num {
+            let response = self.client.read_response().await?;
+            match response {
+                Frame::Array(ref frame) => match frame.as_slice() {
+                    [unsubscribe, channel] if *unsubscribe == "unsubscribe" => {
+                        let len = self.subscribed_channels.len();
+                        if len == 0 {
+                            return Err(response.to_error());
+                        }
+                        self.subscribed_channels.retain(|c| *channel != &c[..]);
+                        if self.subscribed_channels.len() != len - 1 {
+                            return Err(response.to_error());
+                        }
+                    }
+                    _ => return Err(response.to_error()),
+                },
+                frame => return Err(frame.to_error()),
+            };
+        }
+        Ok(())
+    }
 }
 
+#[derive(Debug)]
 pub struct Message {
     pub channel: String,
     pub content: Bytes,

@@ -401,6 +401,15 @@ impl Unsubscribe {
         }
         Ok(Unsubscribe { channels })
     }
+
+    pub fn into_frame(self) -> Frame {
+        let mut frame = Frame::array();
+        frame.push_bulk(Bytes::from("unsubscribe".as_bytes()));
+        for channel in self.channels {
+            frame.push_bulk(Bytes::from(channel.into_bytes()));
+        }
+        frame
+    }
 }
 
 #[derive(Debug, Default)]

@@ -11,5 +11,7 @@ async fn main() -> Result<()> {
     client.publish("numbers", "four".into()).await?;
     client.publish("numbers", "five".into()).await?;
     client.publish("numbers", "6".into()).await?;
+
+    client.publish("foo", "bar".into()).await?;
     Ok(())
 }

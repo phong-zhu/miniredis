@@ -205,5 +205,3 @@ pub struct Message {
     pub channel: String,
     pub content: Bytes,
 }
-
-impl Message {}

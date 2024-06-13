@@ -484,3 +484,22 @@ impl Unknown {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_get() {
+        let get = Get::new("foo");
+        assert_eq!(get.key(), "foo".to_string());
+
+        let frame = get.into_frame();
+        let cmd = Command::from_frame(frame).unwrap();
+        let got = match cmd {
+            Command::Get(got) => got,
+            _ => panic!("not match"),
+        };
+        assert_eq!(got.key(), "foo");
+    }
+}

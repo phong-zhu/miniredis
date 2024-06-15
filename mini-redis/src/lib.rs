@@ -1,10 +1,11 @@
-mod clients;
-mod cmd;
+pub mod clients;
+pub mod cmd;
+pub mod frame;
+pub mod server;
+
 mod connection;
 mod db;
-mod frame;
 mod parse;
-mod server;
 mod shutdown;
 
 pub type Error = Box<dyn std::error::Error + Send + Sync>;

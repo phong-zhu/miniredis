@@ -261,9 +261,6 @@ impl Subscribe {
         connection: &mut Connection,
         shutdown: &mut Shutdown,
     ) -> crate::Result<()> {
-        // let f = Frame::Simple("test".to_string());
-        // connection.write_frame(&f).await?;
-        // Ok(())
         let mut subscriptions = StreamMap::new();
         loop {
             for channel_name in self.channels.drain(..) {
@@ -362,11 +359,11 @@ async fn handle_command(
                         .map(|channel_name| channel_name.to_string())
                         .collect();
                 }
-                for channel_name in unsubscribe.channels {
-                    subscriptions.remove(&channel_name);
-                    let response = make_unsubscribe_frame(channel_name, subscriptions.len());
-                    connection.write_frame(&response).await?;
-                }
+            }
+            for channel_name in unsubscribe.channels {
+                subscriptions.remove(&channel_name);
+                let response = make_unsubscribe_frame(channel_name, subscriptions.len());
+                connection.write_frame(&response).await?;
             }
         }
         command => {

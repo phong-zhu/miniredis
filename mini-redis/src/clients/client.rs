@@ -181,7 +181,7 @@ impl Subscriber {
             let response = self.client.read_response().await?;
             match response {
                 Frame::Array(ref frame) => match frame.as_slice() {
-                    [unsubscribe, channel] if *unsubscribe == "unsubscribe" => {
+                    [unsubscribe, channel, ..] if *unsubscribe == "unsubscribe" => {
                         let len = self.subscribed_channels.len();
                         if len == 0 {
                             return Err(response.to_error());

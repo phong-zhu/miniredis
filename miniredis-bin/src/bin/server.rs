@@ -12,9 +12,12 @@ use tokio::select;
 use tokio::signal;
 use tokio::sync::broadcast;
 use tracing::{debug, error, info, instrument};
+use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt};
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    tracing_subscriber::registry().with(fmt::layer()).init();
+
     let listener = TcpListener::bind(SERVER_ADDR).await.unwrap();
     println!("listening");
     run(listener, signal::ctrl_c()).await;

@@ -16,6 +16,9 @@ use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt};
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    // must use RUST_LOG=debug cargo run
+    tracing_subscriber::fmt::init();
+    // or set hard-code
     tracing_subscriber::registry().with(fmt::layer()).init();
 
     let listener = TcpListener::bind(SERVER_ADDR).await.unwrap();
